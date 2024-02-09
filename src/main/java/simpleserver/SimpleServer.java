@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -86,8 +87,15 @@ public class SimpleServer {
     }
 
     private void info() {
+        Properties properties = new Properties();
+        try {
+            properties.load(this.getClass().getClassLoader().getResourceAsStream("application.properties"));
+        } catch (IOException e) {
+            System.err.println("user requested project version, unable to find!");
+        }
+
         JsonObject response = new JsonObject();
-        response.addProperty("serverVersion", SimpleServer.class.getPackage().getImplementationVersion());
+        response.addProperty("serverVersion", properties.get("version").toString());
         response.addProperty("creationDate", startupTime.format(DateTimeFormatter.ISO_DATE));
 
         sendJsonResponse(response);
