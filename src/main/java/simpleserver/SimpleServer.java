@@ -3,6 +3,9 @@ package simpleserver;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -20,11 +23,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SimpleServer {
+    private final static Logger LOGGER = LoggerFactory.getLogger(SimpleServer.class);
     private PrintWriter clientWriter;
     private final LocalDateTime startupTime = LocalDateTime.now();
     private final Gson gson = new Gson();
 
     public static void main(String[] args) {
+        LoggingUtil.initLogManager();
         new SimpleServer().go();
     }
 
@@ -34,17 +39,17 @@ public class SimpleServer {
         try (ServerSocketChannel serverChannel = ServerSocketChannel.open()) {
             serverChannel.bind(new InetSocketAddress(5000));
 
-            System.out.println("Server is up and running");
+            LOGGER.info("Server is up and running");
             while (serverChannel.isOpen()) {
                 SocketChannel clientSocket = serverChannel.accept();
                 clientWriter = new PrintWriter(Channels.newOutputStream(clientSocket));
 
                 readThread.submit(new ClientHandler(clientSocket));
-                System.out.println("Received a client");
+                LOGGER.info("Server received a new client");
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.error("Critical server exception. Terminating server: " + e);
             System.exit(0);
         }
     }
@@ -52,8 +57,8 @@ public class SimpleServer {
     private void pingBack() {
         JsonObject response = new JsonObject();
         response.addProperty("message", "PONG");
-
         sendJsonResponse(response);
+        LOGGER.debug("Ping method called successfully");
     }
 
     private void uptime() {
@@ -64,12 +69,14 @@ public class SimpleServer {
         response.addProperty("seconds", serverUptime.toSeconds());
 
         sendJsonResponse(response);
+        LOGGER.debug("Uptime method called successfully");
     }
 
     private void sendJsonResponse(JsonObject response) {
         String jsonResponse = gson.toJson(response);
         clientWriter.println(jsonResponse);
         clientWriter.flush();
+        LOGGER.debug("sendJsonResponse method called successfully: " + response);
     }
 
     private void help() {
@@ -84,6 +91,7 @@ public class SimpleServer {
         response.add("commands", commands);
 
         sendJsonResponse(response);
+        LOGGER.debug("Help method called successfully");
     }
 
     private void info() {
@@ -91,7 +99,7 @@ public class SimpleServer {
         try {
             properties.load(this.getClass().getClassLoader().getResourceAsStream("application.properties"));
         } catch (IOException e) {
-            System.err.println("user requested project version, unable to find!");
+            LOGGER.warn("Unable to locate project version");
         }
 
         JsonObject response = new JsonObject();
@@ -99,6 +107,7 @@ public class SimpleServer {
         response.addProperty("creationDate", startupTime.format(DateTimeFormatter.ISO_DATE));
 
         sendJsonResponse(response);
+        LOGGER.debug("Info method called successfully");
     }
 
 
@@ -113,10 +122,11 @@ public class SimpleServer {
 
         @Override
         public void run() {
+            LOGGER.info("New ClientHandler started");
             String message;
             try {
                 while((message = reader.readLine()) != null) {
-                    System.out.println("received: " + message);
+                    LOGGER.info("Received message: {}", message);
 
                     switch (message.toLowerCase()) {
                         case "ping" :
@@ -132,7 +142,7 @@ public class SimpleServer {
                             help();
                             break;
                         case "stop" :
-                            System.out.println("Received stop command, exiting");
+                            LOGGER.warn("Server received stop command. Exiting program");
                             System.exit(0);
                         default:
                             JsonObject response = new JsonObject();
@@ -141,7 +151,7 @@ public class SimpleServer {
                     }
                 }
             } catch (IOException exception) {
-                System.out.println("Connection reset!");
+                LOGGER.warn("Client disconnected from the server");
             }
         }
     }

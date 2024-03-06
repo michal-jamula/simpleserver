@@ -1,5 +1,9 @@
 package simpleserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import simpleserver.util.LoggingUtil;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -12,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SimpleClient {
+    final static Logger LOGGER = LoggerFactory.getLogger(SimpleClient.class.getName());
     private BufferedReader reader;
     private PrintWriter writer;
 
@@ -27,7 +32,7 @@ public class SimpleClient {
             ExecutorService readThread = Executors.newSingleThreadExecutor();
             readThread.execute(new IncomingReader());
 
-            System.out.println("Connection with server established");
+            LOGGER.info("Connection to server established successfully");
 
 
             while (true) {
@@ -37,7 +42,8 @@ public class SimpleClient {
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Connection with server cannot be established, or server disconnected");
+            System.exit(1);
         }
     }
 
@@ -45,26 +51,29 @@ public class SimpleClient {
     private void messageServer(String message) {
         writer.println(message);
         writer.flush();
+        LOGGER.debug("message sent successfully: {}", message);
     }
 
     public class IncomingReader implements Runnable {
-
         @Override
         public void run() {
+            LOGGER.info("Client reader start successful");
             String message;
 
             try {
                 while ((message = reader.readLine()) != null) {
+                    LOGGER.debug("Received message: " + message);
                     System.out.println(message);
                 }
             } catch (IOException e) {
-                System.err.println("Lost or couldn't establish connection with server. Exiting.");
-                System.exit(0);
+                LOGGER.warn("Lost connection with server. Exiting client.", e);
+                System.exit(1);
             }
         }
     }
 
     public static void main(String[] args) {
+        LoggingUtil.initLogManager();
         new SimpleClient().connectToServer();
 
     }
