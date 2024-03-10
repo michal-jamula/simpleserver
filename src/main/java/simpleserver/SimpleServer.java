@@ -1,8 +1,11 @@
 package simpleserver;
 
 import com.google.gson.*;
+import org.apache.commons.collections4.BidiMap;
+import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.exceptions.ClientNotFoundException;
 import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
@@ -22,12 +25,14 @@ import java.util.concurrent.Executors;
 
 public class SimpleServer {
     private final static Logger LOGGER = LoggerFactory.getLogger(SimpleServer.class);
-    private final HashMap<SocketChannel, String> connectedClients;
+    private final BidiMap<SocketChannel, String> connectedClients;
     private final LocalDateTime startupTime = LocalDateTime.now();
     private final Gson gson = new Gson();
+    private final HashMap<String, List<Message>> unreadClientMessages;
 
-    public SimpleServer () {
-        this.connectedClients = new HashMap<>();
+    public SimpleServer() {
+        this.connectedClients = new DualHashBidiMap<>();
+        unreadClientMessages = new HashMap<>();
     }
 
     public static void main(String[] args) {
@@ -115,9 +120,39 @@ public class SimpleServer {
         LOGGER.debug("Info method called successfully");
     }
 
+    private void messageClient(Message message) throws ClientNotFoundException {
+        LOGGER.debug("Sending message to client: {}", message.receiverId());
+        if (unreadClientMessages.get(message.receiverId()) == null ||
+                unreadClientMessages.get(message.receiverId()).isEmpty()) {
+            LOGGER.debug("Client not registered on the list, registering");
+            unreadClientMessages.put(message.receiverId(), new ArrayList<>());
+        }
+
+        var channelOptional = connectedClients.entrySet().stream()
+                .filter(entry -> message.receiverId().equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .findFirst();
+
+        if (channelOptional.isEmpty()) {
+            throw new ClientNotFoundException("Client named "+ message.receiverId() +" is not found");
+        }
+
+        if (unreadClientMessages.get(message.receiverId()).size() < 6) {
+            LOGGER.debug("Packing and sending message: {}", message);
+            var response = new JsonObject();
+            response.addProperty("New DM from", message.senderId());
+            response.addProperty("content", message.message());
+            sendJsonResponse(channelOptional.get(), response);
+            LOGGER.info("message successfully sent: {}", message);
+        }
+
+
+    }
+
     public class ClientHandler implements Runnable {
         BufferedReader reader;
         SocketChannel socketChannel;
+        boolean isRegistered = false;
 
         public ClientHandler(SocketChannel clientSocket) {
             socketChannel = clientSocket;
@@ -129,27 +164,44 @@ public class SimpleServer {
             LOGGER.debug("New ClientHandler started");
             String message;
             try {
-                while((message = reader.readLine()) != null) {
+                while ((message = reader.readLine()) != null) {
 
                     var jsonMessage = new Gson().fromJson(message, JsonObject.class);
                     var response = new JsonObject();
-                    LOGGER.info("Received message: {}", message);
+                    LOGGER.debug("Received message: {}", message);
+
+
+                    if (!isRegistered) {
+                        String username = jsonMessage.get("username").getAsString();
+                        if (connectedClients.entrySet().stream()
+                                .filter(entry -> username.equals(entry.getValue()))
+                                .map(Map.Entry::getKey)
+                                .findFirst()
+                                .isPresent()) {
+
+                                    LOGGER.debug("Client with username {} already registered, disconnecting", username);
+                                    throw new IOException("Client already registered, disconnecting client");
+                        }
+                        connectedClients.put(socketChannel, username);
+                        LOGGER.info("Registered new client, here's his details in connectedClients: {}", connectedClients.get(socketChannel));
+                        isRegistered = true;
+                    }
 
                     if (jsonMessage.has("serverRequest")) {
                         switch (jsonMessage.get("serverRequest").getAsString()) {
-                            case "ping" :
+                            case "ping":
                                 pingBack(socketChannel);
                                 break;
-                            case "uptime" :
+                            case "uptime":
                                 uptime(socketChannel);
                                 break;
-                            case "info" :
+                            case "info":
                                 info(socketChannel);
                                 break;
-                            case "help" :
+                            case "help":
                                 help(socketChannel);
                                 break;
-                            case "stop" :
+                            case "stop":
                                 LOGGER.warn("Server received stop command. Exiting program");
                                 System.exit(0);
                             default:
@@ -159,6 +211,7 @@ public class SimpleServer {
                     } else if (jsonMessage.has("messageObject")) {
                         try {
                             Message messageObject = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
+                            messageClient(messageObject);
                             response.addProperty("success", "message sent");
                             LOGGER.info("Received and successfully handled a direct message: " + messageObject);
 
@@ -172,6 +225,11 @@ public class SimpleServer {
                         sendJsonResponse(socketChannel, response);
                     }
                 }
+            } catch (ClientNotFoundException e) {
+                var response = new JsonObject();
+                response.addProperty("error", "client is not registered with the service");
+                sendJsonResponse(socketChannel, response);
+                LOGGER.info("Tried to send message but receiving client wasn't found");
             } catch (IOException exception) {
                 connectedClients.remove(this.socketChannel);
                 LOGGER.info("Client disconnected from the server. Remaining clients: {}", connectedClients.size());

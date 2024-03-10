@@ -23,6 +23,7 @@ public class SimpleClient {
     private PrintWriter writer;
     private String username;
     private final Gson gson = new Gson();
+    SocketChannel socketChannel;
 
     public SimpleClient(String username) {
         this.username = username;
@@ -32,7 +33,7 @@ public class SimpleClient {
     private void connectToServer() {
         try {
             InetSocketAddress serverAddress = new InetSocketAddress("localhost", 5000);
-            SocketChannel socketChannel = SocketChannel.open(serverAddress);
+            socketChannel = SocketChannel.open(serverAddress);
 
             reader = new BufferedReader(Channels.newReader(socketChannel, StandardCharsets.UTF_8));
             writer = new PrintWriter(Channels.newWriter(socketChannel, StandardCharsets.UTF_8));
@@ -67,14 +68,14 @@ public class SimpleClient {
 
         } catch (IOException e) {
             LOGGER.warn("Connection with server cannot be established, or server disconnected");
-            System.exit(1);
+            System.exit(0);
         }
     }
 
     private void messageServer(String message) {
         writer.println(message);
         writer.flush();
-        LOGGER.info("message sent successfully: {}", message);
+        LOGGER.debug("message sent to server: {}", message);
     }
 
     public class IncomingReader implements Runnable {
@@ -85,7 +86,6 @@ public class SimpleClient {
 
             try {
                 while ((message = reader.readLine()) != null) {
-                    LOGGER.debug("Received message: " + message);
                     System.out.println("Received message: " + message);
                 }
             } catch (IOException e) {
