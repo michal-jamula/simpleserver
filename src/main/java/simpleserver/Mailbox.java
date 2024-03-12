@@ -51,7 +51,6 @@ public class Mailbox {
         unreadMessages.remove(client);
     }
 
-
     public JsonObject openMessage(SimpleClient client) {
         var response = new JsonObject();
         var message = unreadMessages.get(client).pop();

@@ -48,15 +48,13 @@ public class SimpleServer {
             LOGGER.info("Server is up and running");
             while (serverChannel.isOpen()) {
                 SocketChannel clientSocket = serverChannel.accept();
-
                 connectedClients.put(clientSocket, null);
 
                 readThread.submit(new ClientHandler(clientSocket));
                 LOGGER.info("Server received a new client");
             }
-
         } catch (IOException e) {
-            LOGGER.error("Critical server exception. Terminating server: " + e);
+            LOGGER.error("Server unable to start at port: 5000. Terminating server");
             System.exit(0);
         }
     }
@@ -69,9 +67,9 @@ public class SimpleServer {
     }
 
     private void uptime(SocketChannel clientChannel) {
+        JsonObject response = new JsonObject();
         Duration serverUptime = Duration.between(startupTime, LocalDateTime.now());
 
-        JsonObject response = new JsonObject();
         response.addProperty("message", "ServerUptime");
         response.addProperty("seconds", serverUptime.toSeconds());
 
@@ -96,6 +94,7 @@ public class SimpleServer {
         commands.add("ping");
         commands.add("uptime");
         commands.add("message <username> <message of any length>");
+        commands.add("open");
         commands.add("stop");
         response.add("commands", commands);
 
@@ -124,7 +123,6 @@ public class SimpleServer {
         boolean isRegistered = false;
         private final SimpleClient client;
 
-
         public ClientHandler(SocketChannel clientSocket) {
             reader = new BufferedReader(Channels.newReader(clientSocket, StandardCharsets.UTF_8));
             client = new SimpleClient();
@@ -141,7 +139,6 @@ public class SimpleServer {
                     var jsonMessage = new Gson().fromJson(message, JsonObject.class);
                     var response = new JsonObject();
                     LOGGER.debug("Received message: {}", message);
-
 
                     if (!isRegistered) {
                         String username = jsonMessage.get("username").getAsString();
@@ -196,9 +193,6 @@ public class SimpleServer {
                             response.addProperty("message", "unknownCommand");
                             sendJsonResponse(client.getSocketChannel(), response);
                         }
-
-
-
                     } catch (JsonSyntaxException | IllegalStateException e) {
                         LOGGER.warn("Couldn't create a Message object from users' data: {}", e.toString());
                         response.addProperty("serverError", "The server could not parse this message");
@@ -209,9 +203,6 @@ public class SimpleServer {
                         sendJsonResponse(client.getSocketChannel(), response);
                         LOGGER.info("Client tried to open message when it's empty");
                     }
-
-
-
                 }
             } catch (IOException exception) {
                 var response = new JsonObject();

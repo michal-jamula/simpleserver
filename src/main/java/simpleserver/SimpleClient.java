@@ -29,12 +29,18 @@ public class SimpleClient {
     public SimpleClient(String username) {
         this.username = username;
     }
-    public SimpleClient (String username, SocketChannel socketChannel) {
+
+    public SimpleClient(String username, SocketChannel socketChannel) {
         this.username = username;
         this.socketChannel = socketChannel;
     }
 
-    public SimpleClient() {}
+    public SimpleClient() {
+    }
+    public static void main(String[] args) {
+        LoggingUtil.initLogManager();
+        new SimpleClient("john").connectToServer();
+    }
 
     private void connectToServer() {
         try {
@@ -71,7 +77,6 @@ public class SimpleClient {
                 }
                 messageServer(serverResponse.toString());
             }
-
         } catch (IOException e) {
             LOGGER.warn("Connection with server cannot be established, or server disconnected");
             System.exit(0);
@@ -89,7 +94,6 @@ public class SimpleClient {
         public void run() {
             LOGGER.info("Client reader startup successful");
             String message;
-
             try {
                 while ((message = reader.readLine()) != null) {
                     //LOGGER.debug("Received message: {}", message);
@@ -100,33 +104,13 @@ public class SimpleClient {
                         System.out.printf("New message from %s.\nMessage: %s\n", messageObj.senderId(), messageObj.message());
                     } else {
                         System.out.println("Server response: " + message);
-
                     }
-
                 }
             } catch (IOException e) {
                 LOGGER.warn("Lost connection with server. Exit client.", e);
                 System.exit(1);
             }
         }
-    }
-
-    public static void main(String[] args) {
-        LoggingUtil.initLogManager();
-        new SimpleClient("john").connectToServer();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        SimpleClient that = (SimpleClient) o;
-        return Objects.equals(username, that.username);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(username);
     }
 
     public String getUsername() {
@@ -143,5 +127,18 @@ public class SimpleClient {
 
     public void setSocketChannel(SocketChannel socketChannel) {
         this.socketChannel = socketChannel;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SimpleClient that = (SimpleClient) o;
+        return Objects.equals(username, that.username);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(username);
     }
 }
