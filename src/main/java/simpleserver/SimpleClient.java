@@ -14,6 +14,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -23,12 +24,17 @@ public class SimpleClient {
     private PrintWriter writer;
     private String username;
     private final Gson gson = new Gson();
-    SocketChannel socketChannel;
+    private SocketChannel socketChannel;
 
     public SimpleClient(String username) {
         this.username = username;
     }
+    public SimpleClient (String username, SocketChannel socketChannel) {
+        this.username = username;
+        this.socketChannel = socketChannel;
+    }
 
+    public SimpleClient() {}
 
     private void connectToServer() {
         try {
@@ -41,7 +47,7 @@ public class SimpleClient {
             ExecutorService readThread = Executors.newSingleThreadExecutor();
             readThread.execute(new IncomingReader());
 
-            LOGGER.info("Connection to server established successfully");
+            LOGGER.info("Connection with server established");
             BufferedReader clientOptionReader = new BufferedReader(new InputStreamReader(System.in));
 
             while (true) {
@@ -81,12 +87,22 @@ public class SimpleClient {
     public class IncomingReader implements Runnable {
         @Override
         public void run() {
-            LOGGER.info("Client reader start successful");
+            LOGGER.info("Client reader startup successful");
             String message;
 
             try {
                 while ((message = reader.readLine()) != null) {
-                    System.out.println("Received message: " + message);
+                    //LOGGER.debug("Received message: {}", message);
+                    var jsonMessage = gson.fromJson(message, JsonObject.class);
+
+                    if (jsonMessage.has("messageObject")) {
+                        var messageObj = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
+                        System.out.printf("New message from %s.\nMessage: %s\n", messageObj.senderId(), messageObj.message());
+                    } else {
+                        System.out.println("Server response: " + message);
+
+                    }
+
                 }
             } catch (IOException e) {
                 LOGGER.warn("Lost connection with server. Exit client.", e);
@@ -98,5 +114,34 @@ public class SimpleClient {
     public static void main(String[] args) {
         LoggingUtil.initLogManager();
         new SimpleClient("john").connectToServer();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SimpleClient that = (SimpleClient) o;
+        return Objects.equals(username, that.username);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(username);
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public SocketChannel getSocketChannel() {
+        return socketChannel;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setSocketChannel(SocketChannel socketChannel) {
+        this.socketChannel = socketChannel;
     }
 }
