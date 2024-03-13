@@ -1,10 +1,9 @@
 package simpleserver;
 
 import com.google.gson.*;
-import org.apache.commons.collections4.BidiMap;
-import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
@@ -24,14 +23,24 @@ import java.util.concurrent.Executors;
 
 public class SimpleServer {
     private final static Logger LOGGER = LoggerFactory.getLogger(SimpleServer.class);
-    private final BidiMap<SocketChannel, String> connectedClients;
+    private final HashMap<SocketChannel, String> connectedClients;
     private final LocalDateTime startupTime = LocalDateTime.now();
     private final Gson gson = new Gson();
     private final Mailbox mailbox;
+    private final HashMap<String, ServerRequest> serverActions;
+    private static final ArrayList<SimpleClient> registeredUsers = new ArrayList<>();
 
     public SimpleServer() {
-        this.connectedClients = new DualHashBidiMap<>();
+        this.connectedClients = new HashMap<>();
         this.mailbox = new Mailbox();
+        this.serverActions = new HashMap<>();
+
+        serverActions.put("ping", SimpleServer::pingBack);
+        serverActions.put("uptime", this::uptime);
+        serverActions.put("info", this::info);
+        serverActions.put("help", SimpleServer::help);
+        serverActions.put("open", (client) -> sendJsonResponse(client, mailbox.openMessage(client)));
+        serverActions.put("stop", (client) -> System.exit(0));
     }
 
     public static void main(String[] args) {
@@ -59,68 +68,73 @@ public class SimpleServer {
         }
     }
 
-    private void pingBack(SocketChannel clientChannel) {
+    private static void pingBack(SimpleClient client) {
         JsonObject response = new JsonObject();
-        response.addProperty("message", "PONG");
-        sendJsonResponse(clientChannel, response);
+        response.addProperty("response", "PONG");
+        sendJsonResponse(client, response);
         LOGGER.debug("Ping method called successfully");
     }
 
-    private void uptime(SocketChannel clientChannel) {
+    private void uptime(SimpleClient client) {
         JsonObject response = new JsonObject();
         Duration serverUptime = Duration.between(startupTime, LocalDateTime.now());
-
         response.addProperty("message", "ServerUptime");
         response.addProperty("seconds", serverUptime.toSeconds());
 
-        sendJsonResponse(clientChannel, response);
+        sendJsonResponse(client, response);
         LOGGER.debug("Uptime method called successfully");
     }
 
-    private void sendJsonResponse(SocketChannel clientSocket, JsonObject response) {
-        var writer = new PrintWriter(Channels.newOutputStream(clientSocket));
-        String jsonResponse = gson.toJson(response);
+    private static void unknownCommand(SimpleClient client) {
+        sendJsonResponse(client, JsonResponse.serverResponse("error", "unknown server command"));
+    }
+
+    private static void sendJsonResponse(SimpleClient client, JsonObject response) {
+        var writer = new PrintWriter(Channels.newOutputStream(client.getSocketChannel()));
+        String jsonResponse = new Gson().toJson(response);
         writer.println(jsonResponse);
         writer.flush();
         LOGGER.debug("sendJsonResponse method called successfully: " + response);
     }
 
-    private void help(SocketChannel clientChannel) {
+    private static void help(SimpleClient client) {
         JsonObject response = new JsonObject();
         response.addProperty("message", "Available commands");
-        JsonArray commands = new JsonArray();
-        commands.add("help");
-        commands.add("info");
-        commands.add("ping");
-        commands.add("uptime");
-        commands.add("message <username> <message of any length>");
-        commands.add("open");
-        commands.add("stop");
-        response.add("commands", commands);
+        var commands = new ArrayList<>(List.of("help",
+                "info",
+                "ping",
+                "uptime",
+                "message (username) (message of any length)",
+                "open",
+                "login (username) (password)",
+                "stop"));
 
-        sendJsonResponse(clientChannel, response);
+        response.add("commands", new Gson().toJsonTree(commands));
+
+        sendJsonResponse(client, response);
         LOGGER.debug("Help method called successfully");
     }
 
-    private void info(SocketChannel clientChannel) {
+    private void info(SimpleClient client) {
+        var response = new JsonObject();
         Properties properties = new Properties();
         try {
-            properties.load(this.getClass().getClassLoader().getResourceAsStream("application.properties"));
-        } catch (IOException e) {
+            properties.load(SimpleServer.class.getClassLoader().getResourceAsStream("application.properties"));
+        } catch (NullPointerException | IOException e) {
+            sendJsonResponse(client, JsonResponse.serverResponse("error", "Server is unable to find the version"));
             LOGGER.warn("Unable to locate project version");
+            return;
         }
 
-        var response = new JsonObject();
         response.addProperty("serverVersion", properties.get("version").toString());
         response.addProperty("creationDate", startupTime.format(DateTimeFormatter.ISO_DATE));
 
-        sendJsonResponse(clientChannel, response);
+        sendJsonResponse(client, response);
         LOGGER.debug("Info method called successfully");
     }
 
     public class ClientHandler implements Runnable {
         BufferedReader reader;
-        boolean isRegistered = false;
         private final SimpleClient client;
 
         public ClientHandler(SocketChannel clientSocket) {
@@ -137,10 +151,9 @@ public class SimpleServer {
                 while ((message = reader.readLine()) != null) {
 
                     var jsonMessage = new Gson().fromJson(message, JsonObject.class);
-                    var response = new JsonObject();
                     LOGGER.debug("Received message: {}", message);
 
-                    if (!isRegistered) {
+                    if (!client.isRegistered()) {
                         String username = jsonMessage.get("username").getAsString();
                         if (connectedClients.entrySet().stream()
                                 .filter(entry -> username.equals(entry.getValue()))
@@ -155,60 +168,35 @@ public class SimpleServer {
                         mailbox.addClient(new SimpleClient(username, client.getSocketChannel()));
                         this.client.setUsername(username);
                         LOGGER.info("Registered new client with username: {}", username);
-                        isRegistered = true;
+                        client.setRegistered(true);
                     }
                     try {
+
                         if (jsonMessage.has("serverRequest")) {
-                            switch (jsonMessage.get("serverRequest").getAsString()) {
-                                case "ping":
-                                    pingBack(client.getSocketChannel());
-                                    break;
-                                case "uptime":
-                                    uptime(client.getSocketChannel());
-                                    break;
-                                case "info":
-                                    info(client.getSocketChannel());
-                                    break;
-                                case "help":
-                                    help(client.getSocketChannel());
-                                    break;
-                                case "open":
-                                    sendJsonResponse(client.getSocketChannel(), mailbox.openMessage(client));
-                                    break;
-                                case "stop":
-                                    LOGGER.warn("Server received stop command. Exiting program");
-                                    System.exit(0);
-                                default:
-                                    response.addProperty("message", "unknownCommand");
-                                    sendJsonResponse(client.getSocketChannel(), response);
-                            }
+                            var clientRequest = jsonMessage.get("serverRequest").getAsString().trim().toLowerCase();
+
+                            var action = serverActions.getOrDefault(clientRequest, SimpleServer::unknownCommand);
+                            action.execute(this.client);
+                            LOGGER.info("Successfully handled a server request");
                         } else if (jsonMessage.has("messageObject")) {
                             Message messageObject = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
-                            var mailboxResponse = mailbox.sendMessage(messageObject);
-                            mailboxResponse.entrySet().forEach(e ->
-                                    response.addProperty(e.getKey(), e.getValue().getAsString()));
-                            sendJsonResponse(client.getSocketChannel(), response);
-                            LOGGER.info("Received and successfully handled a DM");
+
+                            sendJsonResponse(client, mailbox.sendMessage(messageObject));
+                            LOGGER.info("Successfully handled a DM");
                         } else {
-                            response.addProperty("message", "unknownCommand");
-                            sendJsonResponse(client.getSocketChannel(), response);
+                            sendJsonResponse(client, JsonResponse.serverResponse("error", "unknown command"));
                         }
+
                     } catch (JsonSyntaxException | IllegalStateException e) {
-                        LOGGER.warn("Couldn't create a Message object from users' data: {}", e.toString());
-                        response.addProperty("serverError", "The server could not parse this message");
-                        sendJsonResponse(client.getSocketChannel(), response);
+                        LOGGER.info("Couldn't create a Message object from users' data: {}", e.toString());
+                        sendJsonResponse(client, JsonResponse.serverResponse("error", "The server could not parse this message"));
                     } catch (NoSuchElementException e) {
-                        response.addProperty("status", "error");
-                        response.addProperty("message", "mailbox is empty");
-                        sendJsonResponse(client.getSocketChannel(), response);
+                        sendJsonResponse(client, JsonResponse.serverResponse("error", "mailbox is empty"));
                         LOGGER.info("Client tried to open message when it's empty");
                     }
                 }
             } catch (IOException exception) {
-                var response = new JsonObject();
-                response.addProperty("status", "error");
-                response.addProperty("message", "client with the same username already registered.");
-                sendJsonResponse(this.client.getSocketChannel(), response);
+                sendJsonResponse(client, JsonResponse.serverResponse("error", "client with the same username is already registered"));
                 connectedClients.remove(client.getSocketChannel());
                 mailbox.removeClient(this.client);
                 LOGGER.info("Client disconnected from the server. Remaining clients: {}", connectedClients.size());

@@ -23,6 +23,10 @@ public class SimpleClient {
     private BufferedReader reader;
     private PrintWriter writer;
     private String username;
+    private String password;
+    private UserAuthority authority;
+    private boolean isLoggedIn = false;
+    private boolean isRegistered = false;
     private final Gson gson = new Gson();
     private SocketChannel socketChannel;
 
@@ -39,7 +43,7 @@ public class SimpleClient {
     }
     public static void main(String[] args) {
         LoggingUtil.initLogManager();
-        new SimpleClient("john").connectToServer();
+        new SimpleClient("bob").connectToServer();
     }
 
     private void connectToServer() {
@@ -72,6 +76,11 @@ public class SimpleClient {
 
                     var jsonMessage = gson.toJson(userMessage);
                     serverResponse.addProperty("messageObject", jsonMessage);
+                } else if (messageArray[0].equals("login")) {
+                    String loginUsername = messageArray[1];
+                    String loginPassword = messageArray[2];
+                    serverResponse.addProperty("loginUsername", loginUsername);
+                    serverResponse.addProperty("loginPassword", loginPassword);
                 } else {
                     serverResponse.addProperty("serverRequest", messageArray[0]);
                 }
@@ -96,12 +105,11 @@ public class SimpleClient {
             String message;
             try {
                 while ((message = reader.readLine()) != null) {
-                    //LOGGER.debug("Received message: {}", message);
+                    LOGGER.debug("Received message: {}", message);
                     var jsonMessage = gson.fromJson(message, JsonObject.class);
 
                     if (jsonMessage.has("messageObject")) {
-                        var messageObj = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
-                        System.out.printf("New message from %s.\nMessage: %s\n", messageObj.senderId(), messageObj.message());
+                        System.out.println("New message: " + jsonMessage.get("messageObject").getAsString());
                     } else {
                         System.out.println("Server response: " + message);
                     }
@@ -127,6 +135,22 @@ public class SimpleClient {
 
     public void setSocketChannel(SocketChannel socketChannel) {
         this.socketChannel = socketChannel;
+    }
+
+    public boolean isLoggedIn() {
+        return isLoggedIn;
+    }
+
+    public void setLoggedIn(boolean loggedIn) {
+        isLoggedIn = loggedIn;
+    }
+
+    public boolean isRegistered() {
+        return isRegistered;
+    }
+
+    public void setRegistered(boolean registered) {
+        isRegistered = registered;
     }
 
     @Override

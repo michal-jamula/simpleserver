@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.util.JsonResponse;
 
 import java.util.*;
 
@@ -23,28 +24,22 @@ public class Mailbox {
     }
 
     public JsonObject sendMessage(Message message) {
-        var response = new JsonObject();
         SimpleClient clientComparison = new SimpleClient(message.receiverId());
         LOGGER.debug("New Message received: {}", message);
 
         if (!unreadMessages.containsKey(clientComparison)) {
-            response.addProperty("status", "error");
-            response.addProperty("message", "Client is not registered");
             LOGGER.info("Receiving client is not registered in the mailbox");
-            return response;
+            return JsonResponse.serverResponse("error", "Client is not registered");
         }
 
         if (unreadMessages.get(clientComparison).size() < 5) {
             unreadMessages.get(clientComparison).add(message);
-            response.addProperty("status", "success");
-            response.addProperty("message", "Message sent successfully");
-            LOGGER.info("Message added to queue successfully: {}", message);
+            LOGGER.debug("Message added to queue successfully: {}", message);
+            return JsonResponse.serverResponse("success", "Message sent successfully");
         } else {
-            response.addProperty("status", "error");
-            response.addProperty("message", "Client Mailbox is full");
             LOGGER.info("Client mailbox is full, returning message.");
+            return JsonResponse.serverResponse("error", "Client Mailbox is full");
         }
-        return response;
     }
 
     public void removeClient(SimpleClient client) {
@@ -56,7 +51,7 @@ public class Mailbox {
         var message = unreadMessages.get(client).pop();
 
         response.addProperty("messageObject", gson.toJson(message));
-        LOGGER.info("Opening message: {}", gson.toJson(message));
+        LOGGER.debug("Successfully opened message");
         return response;
     }
 }
