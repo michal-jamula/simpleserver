@@ -1,4 +1,6 @@
-package simpleserver;
+package simpleserver.server;
+
+import simpleserver.client.SimpleClient;
 
 @FunctionalInterface
 public interface ServerRequest {

@@ -1,8 +1,15 @@
-package simpleserver;
+package simpleserver.server;
 
 import com.google.gson.*;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.Message;
+import simpleserver.client.UserAuthority;
+import simpleserver.client.SimpleClient;
+import simpleserver.exceptions.ClientNotFoundException;
+import simpleserver.exceptions.UserAlreadyLoggedInException;
+import simpleserver.exceptions.UserVerificationException;
 import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
 
@@ -14,6 +21,9 @@ import java.nio.channels.Channels;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -28,7 +38,8 @@ public class SimpleServer {
     private final Gson gson = new Gson();
     private final Mailbox mailbox;
     private final HashMap<String, ServerRequest> serverActions;
-    private static final ArrayList<SimpleClient> registeredUsers = new ArrayList<>();
+    private static final HashMap<String, String> registeredUsers = new HashMap<>();
+    private static final ArrayList<String> onlineClients = new ArrayList<>();
 
     public SimpleServer() {
         this.connectedClients = new HashMap<>();
@@ -41,6 +52,9 @@ public class SimpleServer {
         serverActions.put("help", SimpleServer::help);
         serverActions.put("open", (client) -> sendJsonResponse(client, mailbox.openMessage(client)));
         serverActions.put("stop", (client) -> System.exit(0));
+
+        registeredUsers.put("admin", "admin");
+
     }
 
     public static void main(String[] args) {
@@ -69,16 +83,14 @@ public class SimpleServer {
     }
 
     private static void pingBack(SimpleClient client) {
-        JsonObject response = new JsonObject();
-        response.addProperty("response", "PONG");
+        JsonObject response = JsonResponse.serverResponse("success", "PONG");
         sendJsonResponse(client, response);
         LOGGER.debug("Ping method called successfully");
     }
 
     private void uptime(SimpleClient client) {
-        JsonObject response = new JsonObject();
         Duration serverUptime = Duration.between(startupTime, LocalDateTime.now());
-        response.addProperty("message", "ServerUptime");
+        var response = JsonResponse.serverResponse("success", "Server uptime command");
         response.addProperty("seconds", serverUptime.toSeconds());
 
         sendJsonResponse(client, response);
@@ -98,8 +110,7 @@ public class SimpleServer {
     }
 
     private static void help(SimpleClient client) {
-        JsonObject response = new JsonObject();
-        response.addProperty("message", "Available commands");
+        JsonObject response = JsonResponse.serverResponse("success", "available commands");
         var commands = new ArrayList<>(List.of("help",
                 "info",
                 "ping",
@@ -116,7 +127,6 @@ public class SimpleServer {
     }
 
     private void info(SimpleClient client) {
-        var response = new JsonObject();
         Properties properties = new Properties();
         try {
             properties.load(SimpleServer.class.getClassLoader().getResourceAsStream("application.properties"));
@@ -125,6 +135,7 @@ public class SimpleServer {
             LOGGER.warn("Unable to locate project version");
             return;
         }
+        var response = JsonResponse.serverResponse("success", "info request");
 
         response.addProperty("serverVersion", properties.get("version").toString());
         response.addProperty("creationDate", startupTime.format(DateTimeFormatter.ISO_DATE));
@@ -133,14 +144,28 @@ public class SimpleServer {
         LOGGER.debug("Info method called successfully");
     }
 
+    private void verifyUser (SimpleClient client) throws UserVerificationException {
+        if (StringUtils.isBlank(client.getUsername()) ||
+            StringUtils.isBlank(client.getPassword())) {
+            throw new UserVerificationException("Client cannot be verified with blank username or password");
+        }
+    }
+
+    private boolean loginUser (String username, String password) {
+
+        return password.equals(registeredUsers.getOrDefault(username, null));
+    }
+
     public class ClientHandler implements Runnable {
         BufferedReader reader;
-        private final SimpleClient client;
+        private SimpleClient client;
 
         public ClientHandler(SocketChannel clientSocket) {
             reader = new BufferedReader(Channels.newReader(clientSocket, StandardCharsets.UTF_8));
-            client = new SimpleClient();
-            client.setSocketChannel(clientSocket);
+            client = SimpleClient.builder()
+                    .socketChannel(clientSocket)
+                    .isLoggedIn(false)
+                    .build();
         }
 
         @Override
@@ -153,27 +178,37 @@ public class SimpleServer {
                     var jsonMessage = new Gson().fromJson(message, JsonObject.class);
                     LOGGER.debug("Received message: {}", message);
 
-                    if (!client.isRegistered()) {
-                        String username = jsonMessage.get("username").getAsString();
-                        if (connectedClients.entrySet().stream()
-                                .filter(entry -> username.equals(entry.getValue()))
-                                .map(Map.Entry::getKey)
-                                .findFirst()
-                                .isPresent()) {
+                    if (!client.isLoggedIn() || client.getUsername().isEmpty()) {
+                        JsonObject jsonClient = JsonParser.parseString(jsonMessage.get("user").getAsString()).getAsJsonObject();
+                        this.client = SimpleClient.builder()
+                                .username(jsonClient.get("username").getAsString())
+                                .password(jsonClient.get("password").getAsString())
+                                .authority(UserAuthority.valueOf(jsonClient.get("authority").getAsString()))
+                                .isLoggedIn(jsonClient.get("isLoggedIn").getAsBoolean())
+                                .socketChannel(this.client.getSocketChannel())
+                                .build();
 
-                            LOGGER.debug("Client with username {} already registered, disconnecting", username);
-                            throw new IOException("Client already registered, disconnecting client");
-                        }
-                        connectedClients.put(client.getSocketChannel(), username);
-                        mailbox.addClient(new SimpleClient(username, client.getSocketChannel()));
-                        this.client.setUsername(username);
-                        LOGGER.info("Registered new client with username: {}", username);
-                        client.setRegistered(true);
+//                        //Throw error when user tries to log by the same username twice
+//                        if (connectedClients.entrySet().stream()
+//                                .filter(entry -> client.getUsername().equals(entry.getValue()))
+//                                .map(Map.Entry::getKey)
+//                                .findFirst()
+//                                .isPresent()) {
+//
+//                            LOGGER.debug("Client with username {} tried logging in twice", client.getUsername());
+//                            throw new IOException("Client with this username is already logged in, disconnecting client");
+//                        }
+                        connectedClients.put(client.getSocketChannel(), client.getUsername());
+                        mailbox.addClient(this.client);
+
+                        LOGGER.info("Registered new client with username: {}", client.getUsername());
+                        client.setLoggedIn(true);
                     }
                     try {
 
-                        if (jsonMessage.has("serverRequest")) {
-                            var clientRequest = jsonMessage.get("serverRequest").getAsString().trim().toLowerCase();
+                        if (jsonMessage.has("request") && !jsonMessage.get("request").isJsonNull() &&
+                                serverActions.containsKey(jsonMessage.get("request").getAsString())) {
+                            var clientRequest = jsonMessage.get("request").getAsString().trim().toLowerCase();
 
                             var action = serverActions.getOrDefault(clientRequest, SimpleServer::unknownCommand);
                             action.execute(this.client);
@@ -183,6 +218,22 @@ public class SimpleServer {
 
                             sendJsonResponse(client, mailbox.sendMessage(messageObject));
                             LOGGER.info("Successfully handled a DM");
+                        } else if (jsonMessage.get("request").getAsString().equals("login")) {
+                            if (jsonMessage.has("loginUsername") &&
+                                    jsonMessage.has("loginPassword")) {
+
+                                if (loginUser(jsonMessage.get("loginUsername").getAsString(), jsonMessage.get("loginPassword").getAsString())) {
+                                    registeredUsers.put(this.client.getUsername(), this.client.getPassword());
+                                    var response = JsonResponse.serverResponse("success", "Successfully Logged In");
+                                    response.addProperty("loginUsername", jsonMessage.get("loginUsername").getAsString());
+                                    response.addProperty("loginPassword", jsonMessage.get("loginPassword").getAsString());
+                                    sendJsonResponse(this.client, response);
+                                } else {
+                                    sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Could not login"));
+                                }
+                            } else {
+                                sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Cannot login right now"));
+                            }
                         } else {
                             sendJsonResponse(client, JsonResponse.serverResponse("error", "unknown command"));
                         }
@@ -192,16 +243,19 @@ public class SimpleServer {
                         sendJsonResponse(client, JsonResponse.serverResponse("error", "The server could not parse this message"));
                     } catch (NoSuchElementException e) {
                         sendJsonResponse(client, JsonResponse.serverResponse("error", "mailbox is empty"));
-                        LOGGER.info("Client tried to open message when it's empty");
+                        LOGGER.info("Client tried to open message but it's empty");
                     }
                 }
+            } catch (JsonIOException e) {
+                sendJsonResponse(client, JsonResponse.serverResponse("error", "Server could not parse JSON message"));
+                LOGGER.warn("couldn't parse JSON message");
             } catch (IOException exception) {
-                sendJsonResponse(client, JsonResponse.serverResponse("error", "client with the same username is already registered"));
+                sendJsonResponse(client, JsonResponse.serverResponse("error", exception.getMessage()));
                 connectedClients.remove(client.getSocketChannel());
                 mailbox.removeClient(this.client);
                 LOGGER.info("Client disconnected from the server. Remaining clients: {}", connectedClients.size());
             } catch (Exception e) {
-                LOGGER.error("Caught unexpected exception, fix asap: {}", e.toString());
+                LOGGER.error("Caught unhandled exception exception, fix asap: {}", e.toString());
             }
         }
     }

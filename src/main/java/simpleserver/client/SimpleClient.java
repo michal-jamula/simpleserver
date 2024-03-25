@@ -1,8 +1,10 @@
-package simpleserver;
+package simpleserver.client;
 
 import com.google.gson.*;
+import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.Message;
 import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
@@ -18,6 +20,9 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
+@Data
+@Builder
 public class SimpleClient {
     final static Logger LOGGER = LoggerFactory.getLogger(SimpleClient.class.getName());
     private BufferedReader reader;
@@ -25,28 +30,21 @@ public class SimpleClient {
     private String username;
     private String password;
     private UserAuthority authority;
-    private boolean isLoggedIn = false;
-    private boolean isRegistered = false;
+    private boolean isLoggedIn;
     private final Gson gson = new Gson();
     private SocketChannel socketChannel;
 
-    public SimpleClient(String username) {
-        this.username = username;
-    }
-
-    public SimpleClient(String username, SocketChannel socketChannel) {
-        this.username = username;
-        this.socketChannel = socketChannel;
-    }
-
-    public SimpleClient() {
-    }
     public static void main(String[] args) {
         LoggingUtil.initLogManager();
-        new SimpleClient("bob").connectToServer();
+        SimpleClient.builder().build().connectToServer();
     }
 
     private void connectToServer() {
+        this.username = "";
+        this.password = "";
+        this.authority = UserAuthority.USER;
+        this.isLoggedIn = false;
+
         try {
             InetSocketAddress serverAddress = new InetSocketAddress("localhost", 5000);
             socketChannel = SocketChannel.open(serverAddress);
@@ -66,7 +64,15 @@ public class SimpleClient {
                 var message = clientOptionReader.readLine();
                 var messageArray = message.split(" ");
 
-                serverResponse.addProperty("username", this.username);
+                var userProperty = new JsonObject();
+                userProperty.addProperty("username", this.username);
+                userProperty.addProperty("password", this.password);
+                userProperty.addProperty("authority", this.authority.toString());
+                userProperty.addProperty("isLoggedIn", this.isLoggedIn);
+
+                serverResponse.addProperty("user", gson.toJsonTree(userProperty).toString());
+
+                serverResponse.addProperty("request", messageArray[0]);
 
                 if (messageArray[0].equals("message")) {
                     var receiverId = message.split(" ")[1];
@@ -81,9 +87,10 @@ public class SimpleClient {
                     String loginPassword = messageArray[2];
                     serverResponse.addProperty("loginUsername", loginUsername);
                     serverResponse.addProperty("loginPassword", loginPassword);
-                } else {
-                    serverResponse.addProperty("serverRequest", messageArray[0]);
+
                 }
+
+                LOGGER.info("Sending message to server: {}", serverResponse);
                 messageServer(serverResponse.toString());
             }
         } catch (IOException e) {
@@ -112,6 +119,13 @@ public class SimpleClient {
                         System.out.println("New message: " + jsonMessage.get("messageObject").getAsString());
                     } else {
                         System.out.println("Server response: " + message);
+
+                        if (jsonMessage.get("status").getAsString().equals("success") &&
+                            jsonMessage.get("message").getAsString().equals("Successfully Logged In")) {
+
+                            setUsername(jsonMessage.get("loginUsername").getAsString());
+                            setPassword(jsonMessage.get("loginPassword").getAsString());
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -119,38 +133,6 @@ public class SimpleClient {
                 System.exit(1);
             }
         }
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public SocketChannel getSocketChannel() {
-        return socketChannel;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public void setSocketChannel(SocketChannel socketChannel) {
-        this.socketChannel = socketChannel;
-    }
-
-    public boolean isLoggedIn() {
-        return isLoggedIn;
-    }
-
-    public void setLoggedIn(boolean loggedIn) {
-        isLoggedIn = loggedIn;
-    }
-
-    public boolean isRegistered() {
-        return isRegistered;
-    }
-
-    public void setRegistered(boolean registered) {
-        isRegistered = registered;
     }
 
     @Override

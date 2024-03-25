@@ -1,9 +1,11 @@
-package simpleserver;
+package simpleserver.server;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import simpleserver.Message;
+import simpleserver.client.SimpleClient;
 import simpleserver.util.JsonResponse;
 
 import java.util.*;
@@ -24,7 +26,9 @@ public class Mailbox {
     }
 
     public JsonObject sendMessage(Message message) {
-        SimpleClient clientComparison = new SimpleClient(message.receiverId());
+        var clientComparison = SimpleClient.builder()
+                .username(message.receiverId())
+                .build();
         LOGGER.debug("New Message received: {}", message);
 
         if (!unreadMessages.containsKey(clientComparison)) {
