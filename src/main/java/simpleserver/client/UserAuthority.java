@@ -1,4 +1,4 @@
-package simpleserver;
+package simpleserver.client;
 
 public enum UserAuthority {
     ADMIN,
