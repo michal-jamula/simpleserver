@@ -8,23 +8,19 @@ import org.slf4j.LoggerFactory;
 import simpleserver.Message;
 import simpleserver.client.UserAuthority;
 import simpleserver.client.SimpleClient;
-import simpleserver.exceptions.ClientNotFoundException;
-import simpleserver.exceptions.UserAlreadyLoggedInException;
-import simpleserver.exceptions.UserVerificationException;
+import simpleserver.exceptions.ClientVerificationException;
 import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.nio.channels.Channels;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -32,8 +28,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class SimpleServer {
     private final static Logger LOGGER = LoggerFactory.getLogger(SimpleServer.class);
@@ -43,7 +37,6 @@ public class SimpleServer {
     private final Mailbox mailbox;
     private final HashMap<String, ServerRequest> serverActions;
     private static final ArrayList<RegisteredUserCredentials> registeredUsers = new ArrayList<>();
-    private static final ArrayList<String> onlineClients = new ArrayList<>();
 
     public SimpleServer() {
         this.connectedClients = new HashMap<>();
@@ -59,6 +52,10 @@ public class SimpleServer {
 
         SimpleServer.loadRegisteredUsers();
 
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            SimpleServer.saveRegisteredUsers();
+            LOGGER.info("Successfully saved users to local file during shutdown.");
+        }));
     }
 
     public static void main(String[] args) {
@@ -76,6 +73,18 @@ public class SimpleServer {
             LOGGER.error("Unable to load registered users from file");
         }
     }
+
+    private static void saveRegisteredUsers() {
+        try {
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String json = gson.toJson(registeredUsers);
+            Files.writeString(Paths.get("registeredUsers.json"), json);
+            System.out.println("Saved users to local file successfully.");
+        } catch (IOException e) {
+            System.err.println("Unable to save registered users to file");
+        }
+    }
+
 
     public void go() {
         ExecutorService readThread = Executors.newCachedThreadPool();
@@ -159,22 +168,11 @@ public class SimpleServer {
         LOGGER.debug("Info method called successfully");
     }
 
-    private static void verifyUser (SimpleClient client) throws UserVerificationException {
+    private static void verifyUser (SimpleClient client) throws ClientVerificationException {
         if (StringUtils.isBlank(client.getUsername()) ||
             StringUtils.isBlank(client.getPassword())) {
-                throw new UserVerificationException("Client cannot be verified with blank username or password");
+                throw new ClientVerificationException("Client cannot be verified with blank username or password");
         }
-
-        //Throw error when user tries to log by the same username twice
-//                        if (connectedClients.entrySet().stream()
-//                                .filter(entry -> client.getUsername().equals(entry.getValue()))
-//                                .map(Map.Entry::getKey)
-//                                .findFirst()
-//                                .isPresent()) {
-//
-//                            LOGGER.debug("Client with username {} tried logging in twice", client.getUsername());
-//                            throw new IOException("Client with this username is already logged in, disconnecting client");
-//                        }
     }
 
     private boolean loginUser(SimpleClient client, String username, String password) {
@@ -185,7 +183,18 @@ public class SimpleServer {
             return true;
         } else
             return false;
+    }
 
+    private static boolean registerNewUser(String username, String password) {
+        var clientCredential = new RegisteredUserCredentials(username, password);
+
+        if (registeredUsers.contains(clientCredential)) {
+            return false;
+        }
+
+        SimpleServer.registeredUsers.add(clientCredential);
+        LOGGER.info("Added new user to list of registered users");
+        return true;
     }
 
     public class ClientHandler implements Runnable {
@@ -242,7 +251,6 @@ public class SimpleServer {
                                 this.client.setUsername(jsonMessage.get("loginUsername").getAsString());
 
                                 if (loginUser(this.client, jsonMessage.get("loginUsername").getAsString(), jsonMessage.get("loginPassword").getAsString())) {
-                                    registeredUsers.add(new RegisteredUserCredentials(this.client.getUsername(), this.client.getPassword()));
                                     var response = JsonResponse.serverResponse("success", "Successfully Logged In");
                                     response.addProperty("loginUsername", jsonMessage.get("loginUsername").getAsString());
                                     response.addProperty("loginPassword", jsonMessage.get("loginPassword").getAsString());
@@ -254,6 +262,32 @@ public class SimpleServer {
                                 sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Cannot login right now"));
                             }
                             continue;
+                        } else if (jsonMessage.get("request").getAsString().equals("register")) {
+                            if (jsonMessage.has("registerUsername") && jsonMessage.has("registerPassword")) {
+
+
+                                if (registerNewUser(jsonMessage.get("registerUsername").getAsString(), jsonMessage.get("registerPassword").getAsString())) {
+                                    var clientUsername = jsonMessage.get("registerUsername").getAsString();
+                                    var clientPassword = jsonMessage.get("registerPassword").getAsString();
+                                    this.client.setUsername(clientUsername);
+                                    this.client.setPassword(clientPassword);
+                                    if (loginUser(this.client, clientUsername, clientPassword)) {
+                                        var response = JsonResponse.serverResponse("success", "Sucessfully Registered and logged as new user");
+                                        response.addProperty("registerUsername", clientUsername);
+                                        response.addProperty("registerPassword", clientPassword);
+                                        sendJsonResponse(this.client, response);
+                                    } else {
+                                        sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Client registered but can't login"));
+                                        LOGGER.warn("New client successfully registered but unable to login");
+                                    }
+                                } else {
+                                    sendJsonResponse(this.client, JsonResponse.serverResponse("error", "User already registered with this username"));
+                                }
+                            } else {
+                                sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Error during registration"));
+                            }
+                            continue;
+
                         }
 
                         SimpleServer.verifyUser(this.client);
@@ -268,7 +302,7 @@ public class SimpleServer {
                             sendJsonResponse(client, JsonResponse.serverResponse("error", "unknown command"));
                         }
 
-                    } catch (UserVerificationException e) {
+                    } catch (ClientVerificationException e) {
                         LOGGER.info("Unregistered user tried a server command.");
                         sendJsonResponse(client, JsonResponse.serverResponse("error", "User didnt pass verification. Register/Login to query the server"));
                     } catch (JsonSyntaxException | IllegalStateException e) {

@@ -82,11 +82,11 @@ public class SimpleClient {
 
                     var jsonMessage = gson.toJson(userMessage);
                     serverResponse.addProperty("messageObject", jsonMessage);
-                } else if (messageArray[0].equals("login")) {
-                    String loginUsername = messageArray[1];
-                    String loginPassword = messageArray[2];
-                    serverResponse.addProperty("loginUsername", loginUsername);
-                    serverResponse.addProperty("loginPassword", loginPassword);
+                } else if (messageArray[0].equals("login") || messageArray[0].equals("register")) {
+                    String username = messageArray[1];
+                    String password = messageArray[2];
+                    serverResponse.addProperty(messageArray[0].concat("Username") ,username);
+                    serverResponse.addProperty(messageArray[0].concat("Password"), password);
 
                 }
 
@@ -125,6 +125,11 @@ public class SimpleClient {
 
                             setUsername(jsonMessage.get("loginUsername").getAsString());
                             setPassword(jsonMessage.get("loginPassword").getAsString());
+                        } else if (jsonMessage.get("status").getAsString().equals("success") &&
+                                jsonMessage.get("message").getAsString().contains("Sucessfully Registered")) {
+
+                            setUsername(jsonMessage.get("registerUsername").getAsString());
+                            setPassword(jsonMessage.get("registerPassword").getAsString());
                         }
                     }
                 }
