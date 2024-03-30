@@ -22,7 +22,7 @@ public class Mailbox {
     public void addClient(SimpleClient client) {
         unreadMessages.put(client, new LinkedList<>() {
         });
-        LOGGER.debug("New client added to mailbox: {}", client.getUsername());
+        LOGGER.info("New client added to mailbox: {}", client.getUsername());
     }
 
     public JsonObject sendMessage(Message message) {
@@ -33,7 +33,7 @@ public class Mailbox {
 
         if (!unreadMessages.containsKey(clientComparison)) {
             LOGGER.info("Receiving client is not registered in the mailbox");
-            return JsonResponse.serverResponse("error", "Client is not registered");
+            return JsonResponse.serverResponse("error", "Client is not registered in the mailbox");
         }
 
         if (unreadMessages.get(clientComparison).size() < 5) {
