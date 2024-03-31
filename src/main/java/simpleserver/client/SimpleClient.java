@@ -5,6 +5,7 @@ import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import simpleserver.Message;
+import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
 
 import java.io.BufferedReader;
@@ -24,7 +25,7 @@ import java.util.concurrent.Executors;
 @Data
 @Builder
 public class SimpleClient {
-    final static Logger LOGGER = LoggerFactory.getLogger(SimpleClient.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(SimpleClient.class.getName());
     private BufferedReader reader;
     private PrintWriter writer;
     private String username;
@@ -59,42 +60,42 @@ public class SimpleClient {
             BufferedReader clientOptionReader = new BufferedReader(new InputStreamReader(System.in));
 
             while (true) {
-                var serverResponse = new JsonObject();
+                var serverRequest = new JsonObject();
 
                 var message = clientOptionReader.readLine();
                 var messageArray = message.split(" ");
 
-                var userProperty = new JsonObject();
-                userProperty.addProperty("username", this.username);
-                userProperty.addProperty("password", this.password);
-                userProperty.addProperty("authority", this.authority.toString());
-                userProperty.addProperty("isLoggedIn", this.isLoggedIn);
+                var userProperty = JsonResponse.userResponse(username, password, authority, isLoggedIn);
 
-                serverResponse.addProperty("user", gson.toJsonTree(userProperty).toString());
+                serverRequest.addProperty("user", gson.toJsonTree(userProperty).toString());
 
-                serverResponse.addProperty("request", messageArray[0]);
+                serverRequest.addProperty("request", messageArray[0]);
 
                 if (messageArray[0].equals("message")) {
                     var receiverId = message.split(" ")[1];
                     var messagePayload = String.join(" ", Arrays.copyOfRange(messageArray, 2, messageArray.length));
 
-                    var userMessage = new Message(receiverId, this.username, messagePayload);
+                    var userMessage = new Message(receiverId, username, messagePayload);
 
                     var jsonMessage = gson.toJson(userMessage);
-                    serverResponse.addProperty("messageObject", jsonMessage);
+                    serverRequest.addProperty("messageObject", jsonMessage);
                 } else if (messageArray[0].equals("login") || messageArray[0].equals("register")) {
-                    String username = messageArray[1];
-                    String password = messageArray[2];
-                    serverResponse.addProperty(messageArray[0].concat("Username") ,username);
-                    serverResponse.addProperty(messageArray[0].concat("Password"), password);
-
+                    try {
+                        String username = messageArray[1];
+                        String password = messageArray[2];
+                        serverRequest.addProperty(messageArray[0].concat("Username") ,username);
+                        serverRequest.addProperty(messageArray[0].concat("Password"), password);
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                        System.out.println("When using 'Login' or 'Register' need to provide username and password");
+                        continue;
+                    }
                 }
 
-                LOGGER.info("Sending message to server: {}", serverResponse);
-                messageServer(serverResponse.toString());
+                LOGGER.debug("Sending message to server: {}", serverRequest);
+                messageServer(serverRequest.toString());
             }
         } catch (IOException e) {
-            LOGGER.warn("Connection with server cannot be established, or server disconnected");
+            LOGGER.info("Connection with server cannot be established, or server disconnected");
             System.exit(0);
         }
     }

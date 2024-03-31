@@ -18,7 +18,7 @@ import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class Mailbox {
-    private final static Logger LOGGER = LoggerFactory.getLogger(Mailbox.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(Mailbox.class);
     private final Gson gson = new Gson();
     private final HashMap<SimpleClient, LinkedList<Message>> unreadMessages;
     private final ArrayBlockingQueue<Message> messagesToSave;
@@ -27,8 +27,8 @@ public class Mailbox {
         this.unreadMessages = new HashMap<>();
         this.messagesToSave = new ArrayBlockingQueue<>(25);
 
-        Thread messageSaverThread = new Thread(new MessageSaver());
-        messageSaverThread.setPriority(Thread.MIN_PRIORITY);
+        //Save messages to file
+        var messageSaverThread = new Thread(new MessageSaver());
         messageSaverThread.start();
     }
 
@@ -73,7 +73,6 @@ public class Mailbox {
         return response;
     }
 
-    //Saves messages to file in real time, with low priority
     private class MessageSaver implements Runnable {
         private static final String filePath = "successfulMessages.json"; // Read this from application.properties?
         @Override
@@ -85,7 +84,6 @@ public class Mailbox {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                LOGGER.debug("Message saver thread interrupted", e);
             }
         }
 
@@ -98,6 +96,7 @@ public class Mailbox {
                 // Check if the file already exists and is not empty
                 boolean fileExists = Files.exists(path) && Files.size(path) > 0;
 
+                //Formatting necessary to avoid reading the whole file and rewriting everything with an extra message.
                 if (fileExists) {
                     RandomAccessFile file = new RandomAccessFile(filePath, "rw");
                     long length = file.length();

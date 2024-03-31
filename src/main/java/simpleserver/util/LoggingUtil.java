@@ -11,7 +11,7 @@ public class LoggingUtil {
                     "src/main/resources/logging.properties"
             ));
         } catch (IOException e) {
-            System.out.println("Unable to initialize logging manager");
+            System.err.println("Unable to initialize logging manager");
             e.printStackTrace();
         }
     }

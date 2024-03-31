@@ -1,21 +1,46 @@
 [
 {
-  "receiverId": "admin",
+  "receiverId": "client",
+  "senderId": "client",
+  "message": "hello"
+},
+{
+  "receiverId": "client",
   "senderId": "admin",
-  "message": "he"
+  "message": "hello"
+},
+{
+  "receiverId": "client",
+  "senderId": "admin",
+  "message": "how are you"
+},
+{
+  "receiverId": "client",
+  "senderId": "admin",
+  "message": ".."
+},
+{
+  "receiverId": "client",
+  "senderId": "admin",
+  "message": "whats up"
+},
+{
+  "receiverId": "client",
+  "senderId": "admin",
+  "message": "hello?"
+},
+{
+  "receiverId": "client",
+  "senderId": "admin",
+  "message": "are you there?"
 },
 {
   "receiverId": "admin",
-  "senderId": "admin",
-  "message": "heg"
+  "senderId": "client",
+  "message": "asdasda"
 },
 {
   "receiverId": "admin",
-  "senderId": "admin",
-  "message": "hasl"
-},
-{
-  "receiverId": "admin",
-  "senderId": "admin",
-  "message": "ashda"
+  "senderId": "user",
+  "message": "hello"
 }]

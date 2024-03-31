@@ -52,10 +52,8 @@ public class SimpleServer {
 
         SimpleServer.loadRegisteredUsers();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            SimpleServer.saveRegisteredUsers();
-            LOGGER.info("Successfully saved users to local file during shutdown.");
-        }));
+        //Save all new registered users to file when server shuts down
+        Runtime.getRuntime().addShutdownHook(new Thread(SimpleServer::saveRegisteredUsers));
     }
 
     public static void main(String[] args) {
@@ -69,8 +67,9 @@ public class SimpleServer {
             var registeredUserType = new TypeToken<ArrayList<RegisteredUserCredentials>>(){}.getType();
             ArrayList<RegisteredUserCredentials> registeredUsersFromFile = new Gson().fromJson(data, registeredUserType);
             registeredUsers.addAll(registeredUsersFromFile);
+            LOGGER.info("Successfully read registered users from file");
         } catch (IOException e) {
-            LOGGER.error("Unable to load registered users from file");
+            LOGGER.warn("Unable to load registered users from file");
         }
     }
 
@@ -176,7 +175,6 @@ public class SimpleServer {
     }
 
     private boolean loginUser(SimpleClient client, String username, String password) {
-
         if (registeredUsers.stream()
                 .anyMatch(user -> user.username().equals(username) && user.password().equals(password))) {
             mailbox.addClient(client);
@@ -188,9 +186,8 @@ public class SimpleServer {
     private static boolean registerNewUser(String username, String password) {
         var clientCredential = new RegisteredUserCredentials(username, password);
 
-        if (registeredUsers.contains(clientCredential)) {
+        if (registeredUsers.contains(clientCredential))
             return false;
-        }
 
         SimpleServer.registeredUsers.add(clientCredential);
         LOGGER.info("Added new user to list of registered users");
@@ -216,7 +213,7 @@ public class SimpleServer {
             try {
                 while ((message = reader.readLine()) != null) {
 
-                    var jsonMessage = new Gson().fromJson(message, JsonObject.class);
+                    var jsonMessage = gson.fromJson(message, JsonObject.class);
                     LOGGER.debug("Received message: {}", message);
 
                     if (!client.isLoggedIn() || StringUtils.isAnyBlank(client.getUsername(), client.getPassword())) {
@@ -229,9 +226,7 @@ public class SimpleServer {
                                 .socketChannel(this.client.getSocketChannel())
                                 .build();
 
-//
                         connectedClients.put(client.getSocketChannel(), client.getUsername());
-
 
                         LOGGER.debug("Registered new client with username: {}", client.getUsername());
                         client.setLoggedIn(true);
@@ -240,6 +235,7 @@ public class SimpleServer {
                         //Methods which don't require user authentication
                         if (jsonMessage.has("request") && !jsonMessage.get("request").isJsonNull() &&
                                 serverActions.containsKey(jsonMessage.get("request").getAsString())) {
+
                             var clientRequest = jsonMessage.get("request").getAsString().trim().toLowerCase();
 
                             var action = serverActions.getOrDefault(clientRequest, SimpleServer::unknownCommand);
@@ -287,15 +283,13 @@ public class SimpleServer {
                                 sendJsonResponse(this.client, JsonResponse.serverResponse("error", "Error during registration"));
                             }
                             continue;
-
                         }
 
+                        //Server functions which require an authenticated user
                         SimpleServer.verifyUser(this.client);
 
-                        //Methods which require user authentication
                         if (jsonMessage.has("messageObject")) {
                             Message messageObject = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
-
                             sendJsonResponse(client, mailbox.sendMessage(messageObject));
                             LOGGER.info("Successfully handled a DM");
                         }  else {
