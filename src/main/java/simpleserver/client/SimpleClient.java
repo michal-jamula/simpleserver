@@ -5,6 +5,7 @@ import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import simpleserver.Message;
+import simpleserver.dto.RegisteredUserCredentials;
 import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
 
@@ -152,5 +153,9 @@ public class SimpleClient {
     @Override
     public int hashCode() {
         return Objects.hash(username);
+    }
+
+    public RegisteredUserCredentials toRUC() {
+        return new RegisteredUserCredentials(this.username, this.password);
     }
 }

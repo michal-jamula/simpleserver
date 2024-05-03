@@ -1,14 +1,6 @@
 [
   {
-    "username": "client",
-    "password": "client"
-  },
-  {
     "username": "admin",
-    "password": "password"
-  },
-  {
-    "username": "user",
-    "password": "user"
+    "password": "admin"
   }
 ]
