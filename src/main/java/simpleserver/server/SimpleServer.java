@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import simpleserver.client.SimpleClient;
+import simpleserver.repository.MessageRepository;
 import simpleserver.repository.UserRepository;
 import simpleserver.service.MessageService;
 import simpleserver.service.UserService;
@@ -51,9 +52,17 @@ public class SimpleServer {
     public static void main(String[] args){
         LoggingUtil.initLogManager();
 
-        UserRepository userRepository = new UserRepository("registeredUsers.json");
-        MessageService messageService = new MessageService("successfulMessages.json");
-        UserService userService = new UserService(messageService, userRepository);
+        String messageFilePath = "successfulMessages.json";
+        String registeredUsersFilePath = "registeredUsers.json";
+
+        var userRepository = new UserRepository(registeredUsersFilePath);
+        var messageRepository = new MessageRepository(messageFilePath);
+
+        MessageRepository.startupFormatting(messageFilePath);
+        new Thread(messageRepository).start();
+
+        var messageService = new MessageService(messageRepository);
+        var userService = new UserService(messageService, userRepository);
 
         new SimpleServer(userService, messageService).start();
     }

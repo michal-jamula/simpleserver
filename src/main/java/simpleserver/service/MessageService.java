@@ -6,20 +6,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import simpleserver.Message;
 import simpleserver.client.SimpleClient;
+import simpleserver.repository.MessageRepository;
 import simpleserver.util.JsonResponse;
 
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 
 public class MessageService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageService.class);
     private final Gson gson = new Gson();
     private final HashMap<SimpleClient, LinkedList<Message>> unreadMessages;
-    private final ArrayBlockingQueue<Message> messagesToSave;
+    private final MessageRepository messageRepository;
 
-    public MessageService(String filePath) {
+    public MessageService(MessageRepository messageRepository) {
         this.unreadMessages = new HashMap<>();
-        this.messagesToSave = new ArrayBlockingQueue<>(25);
+        this.messageRepository = messageRepository;
     }
 
     public void addClient(SimpleClient client) {
@@ -38,8 +38,8 @@ public class MessageService {
 
         if (unreadMessages.get(clientComparison).size() < 5) {
             unreadMessages.get(clientComparison).add(message);
-            messagesToSave.add(message);
-            LOGGER.debug("Message added to queue successfully: {}", message);
+            messageRepository.saveMessage(message);
+            LOGGER.debug("message processed successfully, sending message to repo: {}", message);
             return JsonResponse.serverResponse("success", "Message sent successfully");
         } else {
             LOGGER.info("Client mailbox is full, returning message.");
