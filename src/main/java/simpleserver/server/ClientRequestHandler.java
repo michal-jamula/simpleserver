@@ -65,7 +65,6 @@ public class ClientRequestHandler implements Runnable {
                             processClientRegistrationFromRequest(jsonMessage);
                             break;
                         case "message":
-                            //server.verifyUser(this.client);
                             processMessageRequest(jsonMessage);
                             break;
                         default:
@@ -98,10 +97,30 @@ public class ClientRequestHandler implements Runnable {
     }
 
     private void processMessageRequest(JsonObject jsonMessage){
-        Message messageObject = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
-        var message = messageService.sendMessage(messageObject);
-        server.sendJsonResponse(client, message);
-        LOGGER.info("Successfully handled a DM");
+        Message message = gson.fromJson(jsonMessage.get("messageObject").getAsString(), Message.class);
+        var jsonResponse = new JsonObject();
+
+
+        if (!userService.userIsConnected(message.senderId())) {
+            jsonResponse = JsonResponse.serverResponse("error", "Client error - client is not logged in");
+            LOGGER.debug("message verification - sender ID is not logged in");
+
+        } else if (!client.getUsername().equals(message.senderId())) {
+            jsonResponse = JsonResponse.serverResponse("error", "Client error - username doesnt equal sender ID");
+            LOGGER.debug("message verification - Client username != sender ID");
+
+
+        } else if (!userService.userIsConnected(message.receiverId())) {
+            jsonResponse = JsonResponse.serverResponse("error", "Recipient is not logged in or registered");
+            LOGGER.debug("message verification - Receiver ID is not connected");
+
+        } else {
+            jsonResponse = messageService.sendMessage(message);
+            LOGGER.debug("message verification - successfully sent message");
+        }
+
+        server.sendJsonResponse(client, jsonResponse);
+        LOGGER.info("Successfully handled a message: {}", jsonResponse.toString());
     }
 
     private void processClientRegistrationFromRequest(JsonObject jsonMessage) {

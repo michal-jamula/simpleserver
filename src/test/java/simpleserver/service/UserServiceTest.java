@@ -47,6 +47,21 @@ class UserServiceTest {
     }
 
     @Test
+    void userIsConnected() {
+        //given
+
+        //when
+        boolean emptyUsernameResult = userService.userIsConnected("");
+        boolean connectedUserResult = userService.userIsConnected(connectedRegisteredUser.getUsername());
+        boolean notConnectedUserResult = userService.userIsConnected("usernameNotConnected");
+
+        //then
+        assertThat(emptyUsernameResult).isFalse();
+        assertThat(connectedUserResult).isTrue();
+        assertThat(notConnectedUserResult).isFalse();
+    }
+
+    @Test
     void verify() {
         //when
         boolean trueUser = userService.verifyUser(connectedRegisteredUser);

@@ -27,6 +27,10 @@ public class UserService {
         //Runtime.getRuntime().addShutdownHook(new Thread(this::saveRegisteredUsers));
     }
 
+    public boolean userIsConnected(String username) {
+        return connectedClients.containsValue(username) && StringUtils.isNotBlank(username);
+    }
+
     public boolean verifyUser(SimpleClient client) {
         return StringUtils.isNotBlank(client.getUsername()) ||
                 StringUtils.isNotBlank(client.getPassword());
