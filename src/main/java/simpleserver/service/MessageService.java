@@ -2,6 +2,7 @@ package simpleserver.service;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import simpleserver.Message;
@@ -9,8 +10,11 @@ import simpleserver.client.SimpleClient;
 import simpleserver.repository.MessageRepository;
 import simpleserver.util.JsonResponse;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.NoSuchElementException;
 
+@Getter
 public class MessageService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageService.class);
     private final Gson gson = new Gson();
@@ -23,8 +27,7 @@ public class MessageService {
     }
 
     public void addClient(SimpleClient client) {
-        unreadMessages.put(client, new LinkedList<>() {
-        });
+        unreadMessages.put(client, new LinkedList<>() {});
         LOGGER.info("New client added to mailbox: {}", client.getUsername());
     }
 
@@ -47,16 +50,23 @@ public class MessageService {
         }
     }
 
-    public void removeClient(SimpleClient client) {
-        unreadMessages.remove(client);
-    }
+    //TODO: client management - have a global list of connected clients?
+//    public void removeClient(SimpleClient client) {
+//        unreadMessages.remove(client);
+//    }
 
     public JsonObject openMessage(SimpleClient client) {
         var response = new JsonObject();
-        var message = unreadMessages.get(client).pop();
 
-        response.addProperty("messageObject", gson.toJson(message));
-        LOGGER.debug("Successfully opened message");
+        try  {
+            var message = unreadMessages.get(client).pop();
+            response = JsonResponse.serverResponse("success", "New message");
+            response.addProperty("messageObject", gson.toJson(message));
+            LOGGER.debug("Client successfully opened a new message");
+        } catch (NoSuchElementException e) { // when message is empty
+            response = JsonResponse.serverResponse("success", "No new messages");
+            LOGGER.debug("Client tried to open message but it's empty");
+        }
         return response;
     }
 }

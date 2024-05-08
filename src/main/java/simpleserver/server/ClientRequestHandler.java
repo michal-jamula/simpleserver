@@ -18,7 +18,6 @@ import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.util.NoSuchElementException;
 
 @Getter
 public class ClientRequestHandler implements Runnable {
@@ -75,9 +74,6 @@ public class ClientRequestHandler implements Runnable {
                 } catch (JsonSyntaxException | IllegalStateException e) {
                     LOGGER.info("Couldn't create a Message object from users' data: {}", e.toString());
                     server.sendJsonResponse(client, JsonResponse.serverResponse("error", "The server could not parse this message"));
-                } catch (NoSuchElementException e) {
-                    server.sendJsonResponse(client, JsonResponse.serverResponse("error", "mailbox is empty"));
-                    LOGGER.info("Client tried to open message but it's empty");
                 }
             }
         } catch (JsonIOException e) {
