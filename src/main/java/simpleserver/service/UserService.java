@@ -60,12 +60,12 @@ public class UserService {
     public boolean registerNewUser(String username, String password) {
         var clientCredential = new RegisteredUserCredentials(username, password);
 
-        for (RegisteredUserCredentials credentials : userRepository.getAllUsers()) {
-            if (credentials.username().equals(username)) {
-                LOGGER.info("Client with {} is already registered", username);
-                return false;
-            }
+        if (userRepository.getAllUsers().stream()
+                .anyMatch(credentials -> credentials.username().equals(username))) {
+            LOGGER.info("Client with {} is already registered", username);
+            return false;
         }
+
 
         userRepository.addUser(clientCredential);
         LOGGER.info("Added new user to list of registered users");

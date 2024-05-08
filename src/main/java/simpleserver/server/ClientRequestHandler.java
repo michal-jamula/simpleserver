@@ -72,10 +72,6 @@ public class ClientRequestHandler implements Runnable {
                             action.execute(this.client);
                             break;
                     }
-
-                //} catch (ClientVerificationException e) { //thrown by server.verifyUser
-                    //LOGGER.info("Unregistered user tried a server command.");
-                    //server.sendJsonResponse(client, JsonResponse.serverResponse("error", "User didnt pass verification. Register/Login to query the server"));
                 } catch (JsonSyntaxException | IllegalStateException e) {
                     LOGGER.info("Couldn't create a Message object from users' data: {}", e.toString());
                     server.sendJsonResponse(client, JsonResponse.serverResponse("error", "The server could not parse this message"));
@@ -85,7 +81,7 @@ public class ClientRequestHandler implements Runnable {
                 }
             }
         } catch (JsonIOException e) {
-            server.sendJsonResponse(client, JsonResponse.serverResponse("error", "Server could not parse JSON message"));
+            server.sendJsonResponse(client, JsonResponse.serverResponse("error", "Server could not parse JSON message. Disconnecting"));
             LOGGER.warn("couldn't parse JSON message");
         } catch (IOException exception) {
             server.sendJsonResponse(client, JsonResponse.serverResponse("error", exception.getMessage()));
@@ -93,7 +89,21 @@ public class ClientRequestHandler implements Runnable {
             LOGGER.info("Client disconnected from the server. Remaining clients: {}", userService.getConnectedClients().size());
         } catch (Exception e) {
             LOGGER.error("Caught unhandled exception exception, fix asap: {}", e.toString());
+        } finally {
+            server.sendJsonResponse(client, JsonResponse.serverResponse("error", "Ending connection"));
+            userService.disconnectClient(this.client.getSocketChannel());
+
+            try {
+                client.getSocketChannel().close();
+            } catch (IOException e) {
+                LOGGER.warn("Exception while closing a client channel: {}", e.toString());
+            }
+
         }
+
+
+
+
     }
 
     private void processMessageRequest(JsonObject jsonMessage){
