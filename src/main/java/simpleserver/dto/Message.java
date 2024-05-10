@@ -1,4 +1,4 @@
-package simpleserver;
+package simpleserver.dto;
 
 import java.util.Objects;
 

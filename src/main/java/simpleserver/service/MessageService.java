@@ -2,19 +2,19 @@ package simpleserver.service;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import simpleserver.Message;
 import simpleserver.client.SimpleClient;
+import simpleserver.dto.Message;
 import simpleserver.repository.MessageRepository;
 import simpleserver.util.JsonResponse;
+import simpleserver.util.StatusEnum;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.NoSuchElementException;
 
-@Getter
+
 public class MessageService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageService.class);
     private final Gson gson = new Gson();
@@ -43,10 +43,10 @@ public class MessageService {
             unreadMessages.get(clientComparison).add(message);
             messageRepository.saveMessage(message);
             LOGGER.debug("message processed successfully, sending message to repo: {}", message);
-            return JsonResponse.serverResponse("success", "Message sent successfully");
+            return JsonResponse.serverResponse(StatusEnum.SUCCESS, "Message sent successfully");
         } else {
             LOGGER.info("Client mailbox is full, returning message.");
-            return JsonResponse.serverResponse("error", "Client Mailbox is full");
+            return JsonResponse.serverResponse(StatusEnum.ERROR, "Client Mailbox is full");
         }
     }
 
@@ -60,11 +60,11 @@ public class MessageService {
 
         try  {
             var message = unreadMessages.get(client).pop();
-            response = JsonResponse.serverResponse("success", "New message");
+            response = JsonResponse.serverResponse(StatusEnum.SUCCESS, "New message");
             response.addProperty("messageObject", gson.toJson(message));
             LOGGER.debug("Client successfully opened a new message");
         } catch (NoSuchElementException e) { // when message is empty
-            response = JsonResponse.serverResponse("success", "No new messages");
+            response = JsonResponse.serverResponse(StatusEnum.SUCCESS, "No new messages");
             LOGGER.debug("Client tried to open message but it's empty");
         }
         return response;

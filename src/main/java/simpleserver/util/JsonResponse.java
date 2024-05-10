@@ -5,10 +5,11 @@ import simpleserver.client.UserAuthority;
 
 public class JsonResponse{
 
-    public static JsonObject serverResponse(String status, String message) {
+    //change status to enum
+    public static JsonObject serverResponse(StatusEnum status, String message) {
         JsonObject response = new JsonObject();
 
-        response.addProperty("status", status);
+        response.addProperty("status", status.toString());
         response.addProperty("message", message);
 
         return response;

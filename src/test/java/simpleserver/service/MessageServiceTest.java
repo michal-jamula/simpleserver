@@ -7,10 +7,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import simpleserver.Message;
 import simpleserver.client.SimpleClient;
+import simpleserver.dto.Message;
 import simpleserver.repository.MessageRepository;
+import simpleserver.util.StatusEnum;
 
+import java.lang.reflect.Field;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.stream.IntStream;
 
@@ -26,14 +29,21 @@ class MessageServiceTest {
     MessageService messageService;
 
     private SimpleClient connectedUser;
+    private HashMap<SimpleClient, LinkedList<Message>> unreadMessages;
 
     @BeforeEach
-    void setup() {
+    void setup() throws NoSuchFieldException, IllegalAccessException{
+        Field unreadMessagesField = MessageService.class.getDeclaredField("unreadMessages");
+        unreadMessagesField.setAccessible(true);
+
+        unreadMessages = (HashMap<SimpleClient, LinkedList<Message>>) unreadMessagesField.get(messageService);
+
+
         this.connectedUser = SimpleClient.builder()
                 .username("connectedUser")
                 .build();
 
-        messageService.getUnreadMessages().put(connectedUser, new LinkedList<>());
+        unreadMessages.put(connectedUser, new LinkedList<>());
     }
 
     @Test
@@ -46,8 +56,8 @@ class MessageServiceTest {
         messageService.addClient(newUser);
 
         //then
-        assertThat(messageService.getUnreadMessages().get(newUser)).isNotNull();
-        assertThat(messageService.getUnreadMessages().get(newUser)).hasSize(0);
+        assertThat(unreadMessages.get(newUser)).isNotNull();
+        assertThat(unreadMessages.get(newUser)).hasSize(0);
 
     }
 
@@ -56,38 +66,36 @@ class MessageServiceTest {
         //given
         Message inputMessage = new Message("connectedUser", "sender", "message Payload");
 
-        var unreadMessageSize = messageService.getUnreadMessages().get(connectedUser).size();
+        var unreadMessageSize = unreadMessages.get(connectedUser).size();
 
         //when
         var jsonResponse = messageService.sendMessage(inputMessage);
 
         //then
         Mockito.verify(messageRepository, times(1)).saveMessage(inputMessage);
-        assertThat(messageService.getUnreadMessages().get(connectedUser).size()).isEqualTo(unreadMessageSize + 1);
+        assertThat(unreadMessages.get(connectedUser).size()).isEqualTo(unreadMessageSize + 1);
         assertThat(jsonResponse.has("status")).isTrue();
         assertThat(jsonResponse.has("message")).isTrue();
-        assertThat(jsonResponse.get("status").getAsString()).isEqualTo("success");
+        assertThat(jsonResponse.get("status").getAsString()).isEqualTo(StatusEnum.SUCCESS.toString());
     }
 
     @Test
     void sendMessageMailboxFull() {
         //given
-        IntStream.rangeClosed(0, 4).forEach(message -> {
-            messageService.getUnreadMessages().get(connectedUser).add(mock(Message.class));
-        });
-        var unreadMessageSize = messageService.getUnreadMessages().get(connectedUser).size();
-        Message inputMessage = new Message("connectedUser", "sender", "message Payload");
 
+        IntStream.rangeClosed(0, 4).forEach(message -> unreadMessages.get(connectedUser).add(mock(Message.class)));
+        var unreadMessageSize = unreadMessages.get(connectedUser).size();
+        Message inputMessage = new Message("connectedUser", "sender", "message Payload");
 
         //when
         var jsonResponse = messageService.sendMessage(inputMessage);
 
         //then
         verifyNoInteractions(messageRepository);
-        assertThat(messageService.getUnreadMessages().get(connectedUser).size()).isEqualTo(unreadMessageSize);
+        assertThat(unreadMessages.get(connectedUser).size()).isEqualTo(unreadMessageSize);
         assertThat(jsonResponse.has("status")).isTrue();
         assertThat(jsonResponse.has("message")).isTrue();
-        assertThat(jsonResponse.get("status").getAsString()).isEqualTo("error");
+        assertThat(jsonResponse.get("status").getAsString()).isEqualTo(StatusEnum.ERROR.toString());
     }
 
 
@@ -95,7 +103,9 @@ class MessageServiceTest {
     void openMessageSuccessful() {
         //given
         var expectedMessage = new Message(connectedUser.getUsername(), "sender", "message Payload");
-        messageService.getUnreadMessages().get(connectedUser).add(expectedMessage);
+
+        unreadMessages.get(connectedUser).add(expectedMessage);
+
 
         //when
         var jsonResponse = messageService.openMessage(connectedUser);

@@ -9,7 +9,7 @@
 //import org.mockito.ArgumentCaptor;
 //import org.mockito.junit.jupiter.MockitoExtension;
 //import org.slf4j.Logger;
-//import simpleserver.Message;
+//import simpleserver.dto.Message;
 //import simpleserver.client.SimpleClient;
 //import simpleserver.client.UserAuthority;
 //import simpleserver.util.JsonResponse;

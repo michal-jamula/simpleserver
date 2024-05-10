@@ -4,7 +4,7 @@ import com.google.gson.*;
 import lombok.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import simpleserver.Message;
+import simpleserver.dto.Message;
 import simpleserver.dto.RegisteredUserCredentials;
 import simpleserver.util.JsonResponse;
 import simpleserver.util.LoggingUtil;
@@ -122,12 +122,12 @@ public class SimpleClient {
                     } else {
                         System.out.println("Server response: " + message);
 
-                        if (jsonMessage.get("status").getAsString().equals("success") &&
+                        if (jsonMessage.get("status").getAsString().equals("SUCCESS") &&
                             jsonMessage.get("message").getAsString().equals("Successfully Logged In")) {
 
                             setUsername(jsonMessage.get("loginUsername").getAsString());
                             setPassword(jsonMessage.get("loginPassword").getAsString());
-                        } else if (jsonMessage.get("status").getAsString().equals("success") &&
+                        } else if (jsonMessage.get("status").getAsString().equals("SUCCESS") &&
                                 jsonMessage.get("message").getAsString().contains("Sucessfully Registered")) {
 
                             setUsername(jsonMessage.get("registerUsername").getAsString());
